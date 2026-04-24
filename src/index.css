@@ -1,0 +1,285 @@
+@import "tailwindcss";
+
+@theme {
+  --font-manrope: "Manrope", sans-serif;
+  --font-oswald: "Oswald", sans-serif;
+  --font-rajdhani: "Rajdhani", sans-serif;
+  --font-sora: "Sora", sans-serif;
+  --font-space: "Space Grotesk", sans-serif;
+  --color-brand: #788023;
+  --color-brand-dark: #646b1d;
+  --color-brand-light: #edf0d2;
+  --color-brand-pale: #f8f9ef;
+  --color-brand-hover: #6f7820;
+}
+
+body {
+  font-family: "Manrope", sans-serif;
+  background-color: #f8f9fc;
+}
+
+/* Scrollbar styles */
+::-webkit-scrollbar { width: 6px; height: 6px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 3px; }
+::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
+
+/* ============================================ */
+/* ANIMATIONS                                    */
+/* ============================================ */
+
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+.animate-fade-in { animation: fadeIn 0.3s ease-out; }
+
+@keyframes fadeInUp {
+  from { opacity: 0; transform: translateY(20px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+.animate-fade-in-up { animation: fadeInUp 0.4s ease-out; }
+
+@keyframes slideIn {
+  from { opacity: 0; transform: translateX(-12px); }
+  to { opacity: 1; transform: translateX(0); }
+}
+.animate-slide-in { animation: slideIn 0.25s ease-out; }
+
+@keyframes slideInRight {
+  from { opacity: 0; transform: translateX(12px); }
+  to { opacity: 1; transform: translateX(0); }
+}
+.animate-slide-in-right { animation: slideInRight 0.3s ease-out; }
+
+@keyframes slideInDown {
+  from { opacity: 0; transform: translateY(-10px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+.animate-slide-in-down { animation: slideInDown 0.25s ease-out; }
+
+@keyframes scaleIn {
+  from { opacity: 0; transform: scale(0.95); }
+  to { opacity: 1; transform: scale(1); }
+}
+.animate-scale-in { animation: scaleIn 0.2s ease-out; }
+
+@keyframes pulse-slow {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.7; }
+}
+.animate-pulse-slow { animation: pulse-slow 2s ease-in-out infinite; }
+
+@keyframes shimmer {
+  0% { background-position: -200% 0; }
+  100% { background-position: 200% 0; }
+}
+.animate-shimmer {
+  background: linear-gradient(90deg, #f1f5f9 25%, #e2e8f0 50%, #f1f5f9 75%);
+  background-size: 200% 100%;
+  animation: shimmer 1.5s ease-in-out infinite;
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+.animate-spin { animation: spin 1s linear infinite; }
+
+@keyframes bounce-in {
+  0% { transform: scale(0.3); opacity: 0; }
+  50% { transform: scale(1.05); }
+  70% { transform: scale(0.9); }
+  100% { transform: scale(1); opacity: 1; }
+}
+.animate-bounce-in { animation: bounce-in 0.5s ease-out; }
+
+@keyframes progress {
+  from { width: 0%; }
+}
+.animate-progress { animation: progress 0.8s ease-out; }
+
+@keyframes countUp {
+  from { opacity: 0; transform: translateY(10px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+.animate-count-up { animation: countUp 0.5s ease-out; }
+
+@keyframes toast-in {
+  from { opacity: 0; transform: translateX(100%); }
+  to { opacity: 1; transform: translateX(0); }
+}
+.animate-toast-in { animation: toast-in 0.3s ease-out; }
+
+@keyframes toast-out {
+  from { opacity: 1; transform: translateX(0); }
+  to { opacity: 0; transform: translateX(100%); }
+}
+.animate-toast-out { animation: toast-out 0.3s ease-in forwards; }
+
+@keyframes float {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-6px); }
+}
+.animate-float { animation: float 3s ease-in-out infinite; }
+
+@keyframes gradient-x {
+  0%, 100% { background-position: 0% 50%; }
+  50% { background-position: 100% 50%; }
+}
+.animate-gradient-x {
+  background-size: 200% 200%;
+  animation: gradient-x 3s ease infinite;
+}
+
+/* ============================================ */
+/* SKELETON LOADING                              */
+/* ============================================ */
+
+.skeleton {
+  position: relative;
+  overflow: hidden;
+  background: #e2e8f0;
+  border-radius: 8px;
+}
+.skeleton::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(90deg, transparent 0%, rgba(255,255,255,0.6) 50%, transparent 100%);
+  animation: shimmer 1.5s ease-in-out infinite;
+}
+
+/* ============================================ */
+/* DRAG & DROP                                   */
+/* ============================================ */
+
+.drag-over {
+  background: rgba(120, 128, 35, 0.08) !important;
+  border-color: #788023 !important;
+  box-shadow: 0 0 0 2px rgba(120, 128, 35, 0.2);
+}
+
+.dragging {
+  opacity: 0.5;
+  transform: rotate(2deg);
+  box-shadow: 0 8px 25px rgba(0,0,0,0.15);
+}
+
+/* ============================================ */
+/* BRAND GRADIENTS                               */
+/* ============================================ */
+
+.brand-gradient {
+  background: linear-gradient(135deg, #788023 0%, #9ca33a 50%, #788023 100%);
+}
+.brand-gradient-subtle {
+  background: linear-gradient(135deg, #f8f9ef 0%, #edf0d2 100%);
+}
+
+/* ============================================ */
+/* MODAL BACKDROP                                */
+/* ============================================ */
+
+.modal-backdrop {
+  backdrop-filter: blur(4px);
+  background: rgba(15, 23, 42, 0.35);
+}
+
+/* ============================================ */
+/* CARD HOVER EFFECTS                            */
+/* ============================================ */
+
+.card-hover {
+  transition: all 0.2s ease;
+}
+.card-hover:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(0,0,0,0.08);
+}
+
+.pipeline-card {
+  transition: all 0.15s ease;
+  cursor: grab;
+}
+.pipeline-card:hover {
+  box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+  transform: translateY(-1px);
+}
+.pipeline-card:active {
+  cursor: grabbing;
+}
+
+/* ============================================ */
+/* STATUS BADGE SHIMMER                          */
+/* ============================================ */
+
+.status-badge-hot {
+  background: linear-gradient(135deg, #fecaca, #fca5a5);
+  color: #991b1b;
+  text-shadow: 0 1px 1px rgba(255,255,255,0.3);
+}
+
+/* ============================================ */
+/* TABLE ROW HOVER                               */
+/* ============================================ */
+
+.table-row-hover {
+  transition: background-color 0.15s ease;
+}
+.table-row-hover:hover {
+  background-color: #f8fafc;
+}
+
+/* ============================================ */
+/* FOCUS RING                                    */
+/* ============================================ */
+
+.focus-ring:focus {
+  outline: none;
+  box-shadow: 0 0 0 3px rgba(120, 128, 35, 0.3);
+}
+
+/* ============================================ */
+/* RESPONSIVE                                    */
+/* ============================================ */
+
+@media (max-width: 768px) {
+  .sidebar-mobile-hidden {
+    display: none;
+  }
+  .sidebar-mobile-visible {
+    display: flex;
+    position: fixed;
+    top: 0; left: 0; bottom: 0;
+    z-index: 50;
+    box-shadow: 4px 0 20px rgba(0,0,0,0.15);
+  }
+}
+
+/* ============================================ */
+/* PRINT STYLES                                  */
+/* ============================================ */
+
+@media print {
+  .no-print { display: none !important; }
+  body { background: white; }
+}
+
+/* ============================================ */
+/* CUSTOM SCROLLBAR FOR PIPELINE                 */
+/* ============================================ */
+
+.pipeline-scroll::-webkit-scrollbar {
+  height: 8px;
+}
+.pipeline-scroll::-webkit-scrollbar-track {
+  background: #f1f5f9;
+  border-radius: 4px;
+}
+.pipeline-scroll::-webkit-scrollbar-thumb {
+  background: #cbd5e1;
+  border-radius: 4px;
+}
+.pipeline-scroll::-webkit-scrollbar-thumb:hover {
+  background: #94a3b8;
+}
