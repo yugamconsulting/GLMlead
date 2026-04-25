@@ -60,12 +60,32 @@ export function generateRecoveryPassword(length = 24): string {
   return output;
 }
 
+import bcrypt from "bcryptjs";
+
 export async function sha256(value: string): Promise<string> {
   const encoded = new TextEncoder().encode(value);
   const digest = await crypto.subtle.digest("SHA-256", encoded);
   return Array.from(new Uint8Array(digest))
     .map((byte) => byte.toString(16).padStart(2, "0"))
     .join("");
+}
+
+export async function hashPassword(password: string): Promise<string> {
+  return bcrypt.hash(password, 10);
+}
+
+export async function verifyPassword(password: string, hash: string): Promise<boolean> {
+  try {
+    // Check if it's a bcrypt hash (starts with $2)
+    if (hash.startsWith('$2')) {
+      return bcrypt.compare(password, hash);
+    }
+    // Legacy SHA-256 support for migration
+    const shaHash = await sha256(password);
+    return shaHash === hash;
+  } catch {
+    return false;
+  }
 }
 
 // =====================================================================

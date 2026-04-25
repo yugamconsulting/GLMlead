@@ -5,6 +5,7 @@
 //   Recurring Invoice Generation, Invoice PDF Preview, Activity Log
 // =====================================================================
 import { useState, useMemo, useCallback } from "react";
+import { jsPDF } from "jspdf";
 import type {
   Invoice, Lead, InvoiceStatus, GstMode, InvoiceAdjustment,
   InvoiceDraft, MonthRangePreset, InvoiceRecurrence,
@@ -317,6 +318,144 @@ export function InvoicesView({ invoices, leads, onInvoicesChange }: InvoicesView
     ]);
     downloadCsv(`invoices-export-${todayISODate()}.csv`, headers, rows);
   }, [filtered]);
+
+  // Generate GST-compliant PDF
+  const generateInvoicePdf = useCallback((inv: Invoice) => {
+    const doc = new jsPDF({ unit: 'mm', format: 'a4' });
+    const pageWidth = doc.internal.pageSize.getWidth();
+    const effTotal = invoiceEffectiveTotal(inv, inv.adjustments);
+    
+    // Header - Two column layout
+    doc.setFontSize(18);
+    doc.setFont('helvetica', 'bold');
+    doc.text('TAX INVOICE', pageWidth - 40, 15);
+    
+    doc.setFontSize(10);
+    doc.setFont('helvetica', 'normal');
+    doc.text(`Invoice No: ${inv.invoiceNumber}`, 15, 15);
+    doc.text(`Date: ${formatDateDisplay(inv.issueDate)}`, 15, 20);
+    
+    // Supplier and Buyer section
+    const supplierY = 30;
+    const colWidth = (pageWidth - 40) / 2;
+    
+    // Supplier (left column)
+    doc.setFont('helvetica', 'bold');
+    doc.text('Supplier:', 15, supplierY);
+    doc.setFont('helvetica', 'normal');
+    let sy = supplierY + 6;
+    if (inv.supplierLegalName) { doc.text(inv.supplierLegalName, 15, sy); sy += 5; }
+    if (inv.supplierAddress) { 
+      const addrLines = doc.splitTextToSize(inv.supplierAddress, colWidth);
+      doc.text(addrLines, 15, sy);
+      sy += addrLines.length * 5;
+    }
+    if (inv.supplierGstin) { doc.text(`GSTIN: ${inv.supplierGstin}`, 15, sy); sy += 5; }
+    if (inv.supplierState) { doc.text(`State: ${inv.supplierState}`, 15, sy); }
+    
+    // Buyer (right column)
+    doc.setFont('helvetica', 'bold');
+    doc.text('Buyer:', 15 + colWidth + 10, supplierY);
+    doc.setFont('helvetica', 'normal');
+    let by = supplierY + 6;
+    doc.text(inv.leadName, 15 + colWidth + 10, by); by += 5;
+    const lead = leads.find(l => l.id === inv.leadId);
+    if (lead?.address) {
+      const buyerAddrLines = doc.splitTextToSize(lead.address, colWidth);
+      doc.text(buyerAddrLines, 15 + colWidth + 10, by);
+      by += buyerAddrLines.length * 5;
+    }
+    if (inv.customerGstin) { doc.text(`GSTIN: ${inv.customerGstin}`, 15 + colWidth + 10, by); by += 5; }
+    if (inv.customerState) { doc.text(`State: ${inv.customerState}`, 15 + colWidth + 10, by); }
+    
+    // Line items table
+    const tableY = Math.max(sy, by) + 15;
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(9);
+    
+    const tableHeaders = ['Service', 'Desc', 'SAC', 'Qty', 'Price', 'GST%', 'Tax', 'Total'];
+    const colWidths = [35, 35, 15, 12, 20, 12, 20, 25];
+    let thX = 15;
+    tableHeaders.forEach((h, i) => {
+      doc.text(h, thX, tableY);
+      thX += colWidths[i];
+    });
+    
+    // Table header line
+    doc.line(15, tableY + 2, pageWidth - 15, tableY + 2);
+    
+    // Line items
+    let rowY = tableY + 8;
+    inv.lineItems.forEach((li) => {
+      doc.setFont('helvetica', 'normal');
+      const lineSubtotal = li.quantity * li.unitPrice;
+      const lineTax = lineSubtotal * (li.gstRate / 100);
+      const lineTotal = lineSubtotal + lineTax;
+      
+      let cx = 15;
+      doc.text(li.serviceName || '-', cx, rowY); cx += colWidths[0];
+      const descLines = doc.splitTextToSize(li.description || '-', colWidths[1]);
+      doc.text(descLines, cx, rowY); cx += colWidths[1];
+      doc.text(li.sacCode || '-', cx, rowY); cx += colWidths[2];
+      doc.text(String(li.quantity), cx, rowY); cx += colWidths[3];
+      doc.text(formatInr(li.unitPrice), cx, rowY); cx += colWidths[4];
+      doc.text(`${li.gstRate}%`, cx, rowY); cx += colWidths[5];
+      doc.text(formatInr(lineTax), cx, rowY); cx += colWidths[6];
+      doc.text(formatInr(lineTotal), cx, rowY);
+      
+      rowY += 8;
+    });
+    
+    // Table bottom line
+    doc.line(15, rowY - 2, pageWidth - 15, rowY - 2);
+    
+    // Tax summary block
+    const taxY = rowY + 5;
+    doc.setFont('helvetica', 'bold');
+    doc.text('Tax Summary:', 15, taxY);
+    doc.setFont('helvetica', 'normal');
+    let txY = taxY + 6;
+    if (inv.cgstAmount > 0) { doc.text(`CGST (${inv.gstRate / 2}%): ${formatInr(inv.cgstAmount)}`, 15, txY); txY += 5; }
+    if (inv.sgstAmount > 0) { doc.text(`SGST (${inv.gstRate / 2}%): ${formatInr(inv.sgstAmount)}`, 15, txY); txY += 5; }
+    if (inv.igstAmount > 0) { doc.text(`IGST (${inv.gstRate}%): ${formatInr(inv.igstAmount)}`, 15, txY); txY += 5; }
+    doc.text(`Total Tax: ${formatInr(invoiceTaxTotal(inv))}`, 15, txY); txY += 7;
+    
+    // Grand total
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(12);
+    doc.text(`Grand Total: ${formatInr(effTotal)}`, pageWidth - 40, txY - 2);
+    
+    // Bank details
+    const bankY = txY + 10;
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(10);
+    doc.text('Bank Details:', 15, bankY);
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(9);
+    let bkY = bankY + 6;
+    doc.text('Account Name: Yugam Consulting', 15, bkY); bkY += 5;
+    doc.text('Bank: HDFC Bank', 15, bkY); bkY += 5;
+    doc.text('Account Number: 50200012345678', 15, bkY); bkY += 5;
+    doc.text('IFSC: HDFC0001234', 15, bkY); bkY += 5;
+    doc.text('Branch: Chennai, Tamil Nadu', 15, bkY);
+    
+    // Notes
+    if (inv.notes) {
+      const notesY = bkY + 10;
+      doc.setFont('helvetica', 'italic');
+      doc.text('Notes:', 15, notesY);
+      doc.setFont('helvetica', 'normal');
+      const noteLines = doc.splitTextToSize(inv.notes, pageWidth - 30);
+      doc.text(noteLines, 15, notesY + 5);
+    }
+    
+    // Footer
+    doc.setFontSize(8);
+    doc.setTextColor(100);
+    doc.text('This is a computer-generated invoice.', pageWidth / 2, 280, { align: 'center' });
+    
+    doc.save(`${inv.invoiceNumber}.pdf`);
+  }, [leads]);
 
   const toggleSelect = useCallback((id: string) => {
     setSelectedIds((prev) => { const next = new Set(prev); if (next.has(id)) next.delete(id); else next.add(id); return next; });
@@ -926,6 +1065,7 @@ function InvoiceDetailModal({ invoice, onClose, onPayment, onStatusChange, onAdj
 
         {/* Action buttons */}
         <div className="mb-4 flex flex-wrap gap-2">
+          <button onClick={() => generateInvoicePdf(invoice)} className="rounded-lg border border-slate-200 px-3 py-1.5 text-xs font-medium text-slate-600 hover:bg-slate-50">📄 Download PDF</button>
           <button onClick={() => window.print()} className="rounded-lg border border-slate-200 px-3 py-1.5 text-xs font-medium text-slate-600 hover:bg-slate-50">🖨️ Print</button>
           <button onClick={() => {
             const subject = encodeURIComponent(`Invoice ${invoice.invoiceNumber} from Yugam Consulting`);

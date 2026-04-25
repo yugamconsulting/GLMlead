@@ -3,7 +3,7 @@
 // Phase 7: Dashboard extracted, clean architecture
 // =====================================================================
 
-import { useState, useCallback, useMemo } from "react";
+import { useState, useCallback, useMemo, useEffect } from "react";
 import type { Lead, Invoice, User, Tenant, ViewKey, AppSettings, PlanTemplate } from "./types/index";
 import {
   DEFAULT_ADMIN_EMAIL, DEFAULT_ADMIN_PASSWORD, DEFAULT_ADMIN_NAME,
@@ -11,6 +11,7 @@ import {
 } from "./constants/index";
 import {
   loadJson, saveJson, makeId, sha256, todayISODate,
+  hashPassword, verifyPassword,
   normalizePlanTemplates,
 } from "./lib/utils";
 
@@ -121,30 +122,97 @@ function LoginPage({ onLogin }: { onLogin: (user: User, tenant: Tenant) => void 
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
   const [googleLoading, setGoogleLoading] = useState(false);
-
+  const [loginAttempts, setLoginAttempts] = useState(0);
+  const [lockedUntil, setLockedUntil] = useState<number | null>(() => {
+    const stored = localStorage.getItem('yugam-login-locked-until');
+    return stored ? Number(stored) : null;
+  });
+  
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError("");
     setLoading(true);
+    
+    // Check if account is locked
+    if (lockedUntil !== null && Date.now() < lockedUntil) {
+      const remainingMs = lockedUntil - Date.now();
+      const remainingMinutes = Math.ceil(remainingMs / 60000);
+      setError(`Too many failed attempts. Try again in ${remainingMinutes} minutes.`);
+      setLoading(false);
+      return;
+    }
+    
+    // Clear lockout if expired
+    if (lockedUntil !== null && Date.now() >= lockedUntil) {
+      setLockedUntil(null);
+      localStorage.removeItem('yugam-login-locked-until');
+      setLoginAttempts(0);
+    }
+    
     try {
       // Check default admin credentials FIRST (before localStorage lookup)
       if (email.toLowerCase() === DEFAULT_ADMIN_EMAIL.toLowerCase()) {
         if (password === DEFAULT_ADMIN_PASSWORD) {
           const user = initializeDefaultAdmin();
           const tenant = initializeDefaultTenant();
+          setLoginAttempts(0);
+          setLockedUntil(null);
+          localStorage.removeItem('yugam-login-locked-until');
           onLogin(user, tenant);
           return;
         }
-        setError("Invalid password."); setLoading(false); return;
+        const next = loginAttempts + 1;
+        setLoginAttempts(next);
+        if (next >= 5) {
+          const until = Date.now() + 15 * 60 * 1000;
+          setLockedUntil(until);
+          localStorage.setItem('yugam-login-locked-until', String(until));
+          setError('Account locked for 15 minutes. Too many failed attempts.');
+        } else {
+          setError(`Invalid password. ${5 - next} attempt${5 - next === 1 ? '' : 's'} remaining.`);
+        }
+        setLoading(false);
+        return;
       }
       // Then check localStorage for other users
       const users = loadJson<User[]>("lt_users", []);
       const user = users.find((u) => u.email.toLowerCase() === email.toLowerCase());
-      if (!user) { setError("User not found. Check email or register first."); setLoading(false); return; }
-      const hash = await sha256(password);
-      if (user.passwordHash && user.passwordHash === hash) { const tenant = initializeDefaultTenant(); onLogin(user, tenant); }
-      else { setError("Invalid credentials."); }
-    } catch { setError("Login failed."); }
+      if (!user) {
+        const next = loginAttempts + 1;
+        setLoginAttempts(next);
+        if (next >= 5) {
+          const until = Date.now() + 15 * 60 * 1000;
+          setLockedUntil(until);
+          localStorage.setItem('yugam-login-locked-until', String(until));
+          setError('Account locked for 15 minutes. Too many failed attempts.');
+        } else {
+          setError(`User not found. Check email or register first. ${5 - next} attempt${5 - next === 1 ? '' : 's'} remaining.`);
+        }
+        setLoading(false);
+        return;
+      }
+      const isValid = await verifyPassword(password, user.passwordHash || '');
+      if (user.passwordHash && isValid) {
+        const tenant = initializeDefaultTenant();
+        setLoginAttempts(0);
+        setLockedUntil(null);
+        localStorage.removeItem('yugam-login-locked-until');
+        onLogin(user, tenant);
+      } else {
+        const next = loginAttempts + 1;
+        setLoginAttempts(next);
+        if (next >= 5) {
+          const until = Date.now() + 15 * 60 * 1000;
+          setLockedUntil(until);
+          localStorage.setItem('yugam-login-locked-until', String(until));
+          setError('Account locked for 15 minutes. Too many failed attempts.');
+        } else {
+          setError(`Invalid credentials. ${5 - next} attempt${5 - next === 1 ? '' : 's'} remaining.`);
+        }
+      }
+    } catch {
+      setError("Login failed.");
+    }
     setLoading(false);
   };
 
@@ -227,10 +295,6 @@ function LoginPage({ onLogin }: { onLogin: (user: User, tenant: Tenant) => void 
               {loading ? <span className="flex items-center justify-center gap-2"><Spinner size="sm" /> Signing in...</span> : "Sign In"}
             </button>
           </form>
-
-          <p className="mt-4 text-center text-xs text-slate-400">
-            Default: <span className="font-mono text-slate-500">{DEFAULT_ADMIN_EMAIL}</span> / <span className="font-mono text-slate-500">{DEFAULT_ADMIN_PASSWORD}</span>
-          </p>
         </div>
         <p className="mt-4 text-center text-xs text-slate-400">
           © {new Date().getFullYear()} Yugam Consulting · Lead Tracker v2.0
@@ -361,6 +425,41 @@ function Sidebar({ currentView, onNavigate, currentUser, tenant, leads, mobileOp
           </aside>
         </div>
       )}
+      {/* Mobile Bottom Tab Bar */}
+      <nav className="md:hidden fixed bottom-0 left-0 right-0 z-40 bg-white border-t border-slate-200 safe-area-bottom">
+        <div className="flex items-center justify-around h-14">
+          <button onClick={() => { onNavigate("dashboard"); }}
+            className={`flex flex-col items-center justify-center w-full h-full ${currentView === "dashboard" ? "text-[#788023]" : "text-slate-400"}`}>
+            <span className="text-lg">📊</span>
+            <span className="text-[9px] font-medium">Today</span>
+          </button>
+          <button onClick={() => { onNavigate("leads"); }}
+            className={`flex flex-col items-center justify-center w-full h-full ${currentView === "leads" ? "text-[#788023]" : "text-slate-400"}`}>
+            <span className="text-lg">👥</span>
+            <span className="text-[9px] font-medium">Leads</span>
+          </button>
+          <button onClick={() => { onNavigate("pipeline"); }}
+            className={`flex flex-col items-center justify-center w-full h-full ${currentView === "pipeline" ? "text-[#788023]" : "text-slate-400"}`}>
+            <span className="text-lg">🔄</span>
+            <span className="text-[9px] font-medium">Pipeline</span>
+          </button>
+          <button onClick={() => { onNavigate("followups"); }}
+            className={`flex flex-col items-center justify-center w-full h-full relative ${currentView === "followups" ? "text-[#788023]" : "text-slate-400"}`}>
+            <span className="text-lg">📅</span>
+            <span className="text-[9px] font-medium">Follow-ups</span>
+            {overdueCount > 0 && (
+              <span className="absolute top-1 right-8 flex h-4 w-4 items-center justify-center rounded-full bg-rose-500 text-[8px] font-bold text-white animate-bounce-in">
+                {overdueCount}
+              </span>
+            )}
+          </button>
+          <button onClick={() => setMobileSidebarOpen(true)}
+            className={`flex flex-col items-center justify-center w-full h-full ${"text-slate-400"}`}>
+            <span className="text-lg">☰</span>
+            <span className="text-[9px] font-medium">More</span>
+          </button>
+        </div>
+      </nav>
     </>
   );
 }
@@ -374,7 +473,9 @@ export default function App() {
   const [currentTenant, setCurrentTenant] = useState<Tenant | null>(null);
   const [currentView, setCurrentView] = useState<ViewKey>("dashboard");
   const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
+  const [mobileTab, setMobileTab] = useState<"today" | "leads" | "pipeline" | "followups" | "more">("today");
   const [appPhase, setAppPhase] = useState<"landing" | "login" | "app">("landing");
+  const [storageQuotaWarning, setStorageQuotaWarning] = useState<string | null>(null);
 
   const [leads, setLeads] = useState<Lead[]>(() => loadJson<Lead[]>("lt_leads", []));
   const [invoices, setInvoices] = useState<Invoice[]>(() => loadJson<Invoice[]>("lt_invoices", []));
@@ -402,6 +503,31 @@ export default function App() {
   const persistSettings = useCallback((updated: AppSettings) => { setSettings(updated); saveJson("lt_settings", updated); }, []);
   const persistTenants = useCallback((updated: Tenant[]) => { setTenants(updated); saveJson("lt_tenants", updated); }, []);
   const persistPlanTemplates = useCallback((updated: PlanTemplate[]) => { setPlanTemplates(updated); saveJson("lt_plan_templates", updated); }, []);
+
+  // Storage quota monitoring
+  useEffect(() => {
+    const checkStorage = () => {
+      let total = 0;
+      for (const key in localStorage) {
+        if (localStorage.hasOwnProperty(key)) {
+          total += localStorage[key].length + key.length;
+        }
+      }
+      const usedBytes = total * 2;
+      const limit = 5 * 1024 * 1024;
+      const usagePercent = (usedBytes / limit) * 100;
+      
+      if (usagePercent >= 80) {
+        setStorageQuotaWarning(`Storage at ${usagePercent.toFixed(0)}% capacity. Export data to free up space.`);
+      } else {
+        setStorageQuotaWarning(null);
+      }
+    };
+    
+    checkStorage();
+    const interval = setInterval(checkStorage, 30000);
+    return () => clearInterval(interval);
+  }, []);
 
   const handleLogin = useCallback((user: User, tenant: Tenant) => {
     setCurrentUser(user); setCurrentTenant(tenant); initializeDefaultAdmin();
@@ -531,6 +657,23 @@ export default function App() {
   return (
     <ToastProvider>
       <div className="flex h-screen overflow-hidden bg-slate-50">
+        {storageQuotaWarning && (
+          <div className="fixed top-0 left-0 right-0 z-50 bg-amber-50 border-b border-amber-200 px-4 py-2 flex items-center justify-between gap-3">
+            <p className="text-xs text-amber-800 font-medium">{storageQuotaWarning}</p>
+            <button 
+              onClick={() => setCurrentView("data-export")}
+              className="rounded bg-amber-100 px-3 py-1 text-xs font-medium text-amber-800 hover:bg-amber-200 transition-colors"
+            >
+              Export Data
+            </button>
+            <button 
+              onClick={() => setStorageQuotaWarning(null)}
+              className="text-amber-600 hover:text-amber-800"
+            >
+              ✕
+            </button>
+          </div>
+        )}
         <Sidebar
           currentView={currentView}
           onNavigate={setCurrentView}
@@ -540,7 +683,7 @@ export default function App() {
           mobileOpen={mobileSidebarOpen}
           onMobileClose={() => setMobileSidebarOpen(false)}
         />
-        <main className="flex flex-1 flex-col overflow-hidden">
+        <main className={`flex flex-1 flex-col overflow-hidden ${storageQuotaWarning ? 'mt-10' : ''}`}>
           {/* Header */}
           <header className="flex items-center justify-between border-b border-slate-200 bg-white px-4 md:px-6 py-3 shadow-sm">
             <div className="flex items-center gap-3">
@@ -605,7 +748,7 @@ export default function App() {
               </button>
             </div>
           </header>
-          <div className="flex-1 overflow-y-auto p-4 md:p-6">
+          <div className="flex-1 overflow-y-auto p-4 md:p-6 pb-20">
             <div className="animate-fade-in">
               {renderView()}
             </div>
