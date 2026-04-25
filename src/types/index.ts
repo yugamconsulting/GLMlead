@@ -116,6 +116,7 @@ export interface Lead {
   invoiceFlowStatus: string;
   invoiceSentDate: string;
   isDeleted: boolean;
+  isArchived: boolean;
   createdAt: string;
   updatedAt: string;
   tenantId: string;
@@ -495,6 +496,8 @@ export type ViewKey =
   | "notifications"
   | "help"
   | "data-export";
+
+export type MobileTabKey = "today" | "leads" | "pipeline" | "followups" | "more";
 
 export interface ViewState {
   currentView: ViewKey;

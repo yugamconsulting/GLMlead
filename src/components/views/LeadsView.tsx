@@ -55,7 +55,7 @@ function emptyLead(): Lead {
     dateAdded: todayISODate(), nextFollowupDate: "", lastContactedDate: "",
     followupStatus: "Pending", expectedClosingDate: "",
     notes: "", invoiceFlowStatus: "Not Sent", invoiceSentDate: "",
-    isDeleted: false, createdAt: new Date().toISOString(),
+    isDeleted: false, isArchived: false, createdAt: new Date().toISOString(),
     updatedAt: new Date().toISOString(), tenantId: DEFAULT_TENANT_ID,
     duplicateOf: null, tags: [], customFields: {},
   };
@@ -961,7 +961,8 @@ export function LeadsView({ leads, onLeadsChange, currentUser, onNavigate }: Lea
   const [mergeDuplicates, setMergeDuplicates] = useState<Lead[]>([]);
 
   /* ---- data ---- */
-  const activeLeads = useMemo(() => leads.filter((l) => !l.isDeleted), [leads]);
+  const activeLeads = useMemo(() => leads.filter((l) => !l.isDeleted && !l.isArchived), [leads]);
+  const archivedLeads = useMemo(() => leads.filter((l) => l.isArchived && !l.isDeleted), [leads]);
   const assigneeOptions = useMemo(() => [...new Set(activeLeads.map((l) => l.assignedTo).filter(Boolean))], [activeLeads]);
 
   const filtered = useMemo(() => {
@@ -1039,6 +1040,10 @@ export function LeadsView({ leads, onLeadsChange, currentUser, onNavigate }: Lea
     onLeadsChange(leads.map((l) => l.id === id ? { ...l, isDeleted: true, updatedAt: new Date().toISOString() } : l));
   }, [leads, onLeadsChange]);
 
+  const handleArchiveLead = useCallback((id: string) => {
+    onLeadsChange(leads.map((l) => l.id === id ? { ...l, isArchived: true, updatedAt: new Date().toISOString() } : l));
+  }, [leads, onLeadsChange]);
+
   const handleStatusChange = useCallback((id: string, status: LeadStatus) => {
     onLeadsChange(leads.map((l) => l.id === id ? { ...l, leadStatus: status, updatedAt: new Date().toISOString() } : l));
   }, [leads, onLeadsChange]);
@@ -1095,60 +1100,62 @@ export function LeadsView({ leads, onLeadsChange, currentUser, onNavigate }: Lea
         </div>
       </div>
 
-      {/* Filters Bar */}
+      {/* Simplified Toolbar - 4 controls only */}
       <div className="flex flex-wrap items-center gap-2">
-        {/* Quick filters */}
-        {(["all", "open", "won", "lost", "new"] as const).map((qf) => (
-          <button key={qf} type="button" onClick={() => { setQuickFilter(qf); if (qf !== "all") setStatusFilter("all"); }}
-            className={`rounded-full px-3 py-1 text-xs font-medium transition-colors ${quickFilter === qf ? "bg-[#788023] text-white" : "bg-slate-100 text-slate-600 hover:bg-slate-200"}`}>
-            {qf === "all" ? "All" : qf === "open" ? "Open" : qf === "won" ? "Won" : qf === "lost" ? "Lost" : "New"}
-          </button>
-        ))}
-        <span className="text-slate-300">|</span>
         {/* Search */}
         <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search leads..."
           className="w-48 rounded-lg border border-slate-200 px-3 py-1.5 text-sm focus:border-[#788023] focus:ring-2 focus:ring-[#788023]/40" />
-        {/* Status */}
-        <select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value as LeadStatus | "all")} className="rounded-lg border border-slate-200 px-2 py-1.5 text-sm">
-          <option value="all">All Status</option>
-          {LEAD_STATUSES.map((s) => <option key={s} value={s}>{s}</option>)}
-        </select>
-        {/* Source */}
-        <select value={sourceFilter} onChange={(e) => setSourceFilter(e.target.value as LeadSource | "all")} className="rounded-lg border border-slate-200 px-2 py-1.5 text-sm">
-          <option value="all">All Source</option>
-          {LEAD_SOURCES.map((s) => <option key={s} value={s}>{s}</option>)}
-        </select>
-        {/* Temperature */}
-        <select value={tempFilter} onChange={(e) => setTempFilter(e.target.value as LeadTemperature | "all")} className="rounded-lg border border-slate-200 px-2 py-1.5 text-sm">
-          <option value="all">All Temp</option>
-          {LEAD_TEMPERATURES.map((t) => <option key={t} value={t}>{t}</option>)}
-        </select>
-        {/* Assignee */}
-        <select value={assigneeFilter} onChange={(e) => setAssigneeFilter(e.target.value)} className="rounded-lg border border-slate-200 px-2 py-1.5 text-sm">
-          <option value="all">All Assignee</option>
-          {assigneeOptions.map((a) => <option key={a} value={a}>{a}</option>)}
-        </select>
-        {/* Column picker */}
-        <div className="relative">
-          <button type="button" onClick={() => setShowColPicker(!showColPicker)} className="rounded-lg border border-slate-200 px-2 py-1.5 text-sm text-slate-600 hover:bg-slate-50">Columns ▾</button>
-          {showColPicker && (
-            <div className="absolute right-0 top-full z-20 mt-1 w-48 rounded-lg border border-slate-200 bg-white p-2 shadow-lg">
-              <p className="text-xs font-semibold text-slate-700 mb-1">Optional Columns</p>
-              {OPT_COLS.map((col) => (
-                <label key={col.key} className="flex items-center gap-2 py-0.5 text-xs text-slate-600 cursor-pointer">
-                  <input type="checkbox" checked={showCols.has(col.key)} onChange={(e) => {
-                    const next = new Set(showCols);
-                    if (e.target.checked) next.add(col.key); else next.delete(col.key);
-                    setShowCols(next);
-                  }} className="rounded border-slate-300" />
-                  {col.label}
-                </label>
-              ))}
-            </div>
-          )}
-        </div>
+        
+        {/* Filter Panel Toggle */}
+        <button type="button" onClick={() => setShowFilters(!showFilters)} 
+          className={`rounded-lg border px-3 py-1.5 text-sm font-medium transition-colors ${showFilters ? "bg-[#788023] text-white border-[#788023]" : "border-slate-200 bg-white text-slate-700 hover:bg-slate-50"}`}>
+          Filter {showFilters ? "▴" : "▾"}
+        </button>
+        
         <span className="ml-auto text-xs text-slate-400">{filtered.length} leads</span>
+        
+        {/* Add Lead */}
+        <button type="button" onClick={() => setShowIntake(true)}
+          className="rounded-lg bg-[#788023] px-4 py-2 text-sm font-medium text-white hover:bg-[#646b1d]">Add Lead</button>
+        
+        {/* Import CSV */}
+        <button type="button" onClick={() => setShowCsvImport(true)}
+          className="rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-100">Import CSV</button>
       </div>
+
+      {/* Filter Panel */}
+      {showFilters && (
+        <div className="flex flex-wrap items-center gap-2 rounded-lg border border-slate-200 bg-slate-50 p-3">
+          {/* Quick filters */}
+          {(["all", "open", "won", "lost", "new"] as const).map((qf) => (
+            <button key={qf} type="button" onClick={() => { setQuickFilter(qf); if (qf !== "all") setStatusFilter("all"); }}
+              className={`rounded-full px-3 py-1 text-xs font-medium transition-colors ${quickFilter === qf ? "bg-[#788023] text-white" : "bg-white text-slate-600 hover:bg-slate-200"}`}>
+              {qf === "all" ? "All" : qf === "open" ? "Open" : qf === "won" ? "Won" : qf === "lost" ? "Lost" : "New"}
+            </button>
+          ))}
+          <span className="text-slate-300">|</span>
+          {/* Status */}
+          <select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value as LeadStatus | "all")} className="rounded-lg border border-slate-200 px-2 py-1.5 text-sm">
+            <option value="all">All Status</option>
+            {LEAD_STATUSES.map((s) => <option key={s} value={s}>{s}</option>)}
+          </select>
+          {/* Source */}
+          <select value={sourceFilter} onChange={(e) => setSourceFilter(e.target.value as LeadSource | "all")} className="rounded-lg border border-slate-200 px-2 py-1.5 text-sm">
+            <option value="all">All Source</option>
+            {LEAD_SOURCES.map((s) => <option key={s} value={s}>{s}</option>)}
+          </select>
+          {/* Temperature */}
+          <select value={tempFilter} onChange={(e) => setTempFilter(e.target.value as LeadTemperature | "all")} className="rounded-lg border border-slate-200 px-2 py-1.5 text-sm">
+            <option value="all">All Temp</option>
+            {LEAD_TEMPERATURES.map((t) => <option key={t} value={t}>{t}</option>)}
+          </select>
+          {/* Assignee */}
+          <select value={assigneeFilter} onChange={(e) => setAssigneeFilter(e.target.value)} className="rounded-lg border border-slate-200 px-2 py-1.5 text-sm">
+            <option value="all">All Assignee</option>
+            {assigneeOptions.map((a) => <option key={a} value={a}>{a}</option>)}
+          </select>
+        </div>
+      )}
 
       {/* Selection bar */}
       {selectedIds.size > 0 && (
@@ -1262,6 +1269,7 @@ export function LeadsView({ leads, onLeadsChange, currentUser, onNavigate }: Lea
                           {LEAD_STATUSES.filter((s) => s !== lead.leadStatus).map((s) => <option key={s} value={s}>{s}</option>)}
                         </select>
                       )}
+                      <button type="button" onClick={() => handleArchiveLead(lead.id)} className="rounded p-1 text-slate-400 hover:bg-amber-50 hover:text-amber-600" title="Archive">📦</button>
                       <button type="button" onClick={() => handleDeleteLead(lead.id)} className="rounded p-1 text-slate-400 hover:bg-rose-50 hover:text-rose-600" title="Delete">🗑</button>
                     </div>
                   </td>

@@ -1441,6 +1441,7 @@ type TenantDetailViewProps = {
 function TenantDetailView({ tenants }: TenantDetailViewProps) {
   const [selectedTenantId, setSelectedTenantId] = useState<string>(tenants[0]?.id ?? "");
   const [detailTab, setDetailTab] = useState<"overview" | "entitlements" | "subscription" | "logs">("overview");
+  const [revealedTenantId, setRevealedTenantId] = useState<string | null>(null);
 
   const tenant = tenants.find((t) => t.id === selectedTenantId);
   const lc = tenant ? tenantLifecycle(tenant) : null;
@@ -1534,13 +1535,43 @@ function TenantDetailView({ tenants }: TenantDetailViewProps) {
                     ["In Grace", lc.inGrace ? "Yes" : "No"],
                     ["Is Blocked", lc.isBlocked ? "Yes" : "No"],
                     ["Auto-Renew", tenant.autoRenew ? "Yes" : "No"],
-                    ["Recovery Password", tenant.recoveryPassword ? "••••••••" : "Not set"],
                   ].map(([label, value]) => (
                     <div key={label} className="flex justify-between py-1 border-b border-slate-50">
                       <span className="text-slate-500">{label}</span>
                       <span className="font-medium text-slate-800">{value}</span>
                     </div>
                   ))}
+                  {/* Recovery Password - Reveal on Click */}
+                  <div className="flex justify-between py-1 border-b border-slate-50 items-center">
+                    <span className="text-slate-500">Recovery Password</span>
+                    {revealedTenantId === tenant.id && tenant.recoveryPassword ? (
+                      <div className="flex items-center gap-2">
+                        <code className="text-xs bg-slate-100 px-2 py-1 rounded font-mono text-slate-800">{tenant.recoveryPassword}</code>
+                        <button
+                          type="button"
+                          onClick={() => navigator.clipboard.writeText(tenant.recoveryPassword!)}
+                          className="text-xs text-[#788023] hover:text-[#5a601a] font-medium"
+                        >
+                          Copy
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setRevealedTenantId(null)}
+                          className="text-xs text-slate-400 hover:text-slate-600"
+                        >
+                          Hide
+                        </button>
+                      </div>
+                    ) : (
+                      <button
+                        type="button"
+                        onClick={() => setRevealedTenantId(tenant.id)}
+                        className="text-xs text-[#788023] hover:text-[#5a601a] font-medium"
+                      >
+                        Reveal Recovery Password
+                      </button>
+                    )}
+                  </div>
                 </div>
               </div>
             </div>

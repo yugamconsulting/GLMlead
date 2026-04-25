@@ -7,7 +7,7 @@ import { useState, useMemo, useCallback, useEffect } from "react";
 import type { User, Lead, Invoice, AppSettings } from "../../types/index";
 import {
   formatInr, formatDateDisplay, dateTag, leadHealthScore, makeId, sha256,
-  todayISODate, isOpenLeadStatus, daysSince,
+  todayISODate, isOpenLeadStatus, daysSince, hashPassword,
 } from "../../lib/utils";
 import { DEFAULT_TENANT_ID, LEAD_SOURCES } from "../../constants/index";
 
@@ -591,7 +591,7 @@ export function UsersView({ users, leads, onUsersChange, currentUser }: {
 
   const handleAddUser = useCallback(async () => {
     if (!newName.trim() || !newEmail.trim()) return;
-    const hash = await sha256("Welcome@123");
+    const hash = await hashPassword("Welcome@123");
     const newUser: User = {
       id: makeId(), name: newName.trim(), email: newEmail.trim(), phone: newPhone.trim(),
       role: newRole as User["role"], isActive: true, tenantId: DEFAULT_TENANT_ID,
@@ -992,6 +992,40 @@ export function UsersView({ users, leads, onUsersChange, currentUser }: {
   );
 }
 
+// ---------- ARCHIVED LEADS SECTION ----------
+function ArchivedLeadsSection({ leads, onRestore, onPermanentDelete }: { 
+  leads: Lead[]; 
+  onRestore: (id: string) => void;
+  onPermanentDelete: (id: string) => void;
+}) {
+  const archivedLeads = useMemo(() => leads.filter((l) => l.isArchived && !l.isDeleted), [leads]);
+  
+  if (archivedLeads.length === 0) {
+    return <p className="text-sm text-slate-500 italic">No archived leads.</p>;
+  }
+
+  return (
+    <div className="space-y-2">
+      {archivedLeads.map((lead) => (
+        <div key={lead.id} className="flex items-center justify-between rounded-lg border border-slate-200 p-3">
+          <div>
+            <p className="text-sm font-medium text-slate-800">{lead.leadName}</p>
+            <p className="text-xs text-slate-500">{lead.companyName} • {lead.phoneNumber}</p>
+          </div>
+          <div className="flex gap-2">
+            <button onClick={() => onRestore(lead.id)} className="rounded bg-emerald-600 px-3 py-1 text-xs text-white hover:bg-emerald-700">
+              Restore
+            </button>
+            <button onClick={() => onPermanentDelete(lead.id)} className="rounded bg-rose-600 px-3 py-1 text-xs text-white hover:bg-rose-700">
+              Delete Forever
+            </button>
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
 // ---------- SETTINGS VIEW ----------
 export function SettingsView({ settings, onSettingsChange, leads, invoices, onResetData }: {
   settings: AppSettings;
@@ -1324,6 +1358,21 @@ export function SettingsView({ settings, onSettingsChange, leads, invoices, onRe
       {/* ---- DATA MANAGEMENT ---- */}
       {settingsTab === "data" && (
         <div className="space-y-4">
+          {/* Archived Leads Section */}
+          <div className="rounded-xl border border-slate-200 bg-white p-5 card-hover">
+            <h3 className="mb-3 text-sm font-semibold text-slate-800">🗄️ Archived Leads</h3>
+            <p className="mb-3 text-xs text-slate-600">Manage soft-deleted leads. Restore or permanently delete.</p>
+            <ArchivedLeadsSection leads={leads} onRestore={(id) => {
+              const updated = leads.map(l => l.id === id ? { ...l, isArchived: false } : l);
+              localStorage.setItem("lt_leads", JSON.stringify(updated));
+              window.location.reload();
+            }} onPermanentDelete={(id) => {
+              const updated = leads.filter(l => l.id !== id);
+              localStorage.setItem("lt_leads", JSON.stringify(updated));
+              window.location.reload();
+            }} />
+          </div>
+
           <div className="rounded-xl border border-slate-200 bg-white p-5 card-hover">
             <h3 className="mb-3 text-sm font-semibold text-slate-800">📊 Data Summary</h3>
             <div className="grid grid-cols-2 gap-4 sm:grid-cols-4 lg:grid-cols-6">
